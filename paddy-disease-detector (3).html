@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paddy Disease Detector</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',sans-serif; background:#f5f7f5; color:#1a2e1a; font-size:15px; }
+.topbar { background:#2d6a4f; color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; }
+.topbar h1 { font-size:17px; font-weight:600; }
+.topbar span { font-size:12px; opacity:0.75; }
+#status-bar { background:#fff; border-bottom:1px solid #e0eae0; padding:10px 24px; display:flex; align-items:center; gap:10px; font-size:13px; color:#4a7c59; }
+.dot { width:8px; height:8px; border-radius:50%; background:#f4a261; flex-shrink:0; animation:blink 1.5s infinite; }
+.dot.ready { background:#52b788; animation:none; }
+.dot.error { background:#e63946; animation:none; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.main { max-width:700px; margin:0 auto; padding:28px 20px 60px; }
+.upload-box { border:2px dashed #b7d9c5; border-radius:12px; background:#fff; padding:48px 24px; text-align:center; cursor:pointer; transition:border-color 0.2s,background 0.2s; }
+.upload-box:hover,.upload-box.dragover { border-color:#2d6a4f; background:#f0faf4; }
+.upload-box .icon { font-size:40px; margin-bottom:12px; }
+.upload-box h2 { font-size:17px; font-weight:600; margin-bottom:6px; }
+.upload-box p { font-size:13px; color:#6b8f71; margin-bottom:20px; }
+.btn-row { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.btn-primary { background:#2d6a4f; color:#fff; border:none; padding:10px 22px; border-radius:8px; font-size:14px; font-weight:500; cursor:pointer; transition:background 0.2s; display:inline-flex; align-items:center; gap:8px; }
+.btn-primary:hover { background:#1b4332; }
+.btn-primary:disabled { background:#aaa; cursor:not-allowed; }
+.btn-secondary { background:#fff; color:#2d6a4f; border:1.5px solid #2d6a4f; padding:10px 22px; border-radius:8px; font-size:14px; font-weight:500; cursor:pointer; transition:all 0.2s; width:100%; }
+.btn-secondary:hover { background:#f0faf4; }
+#file-input { display:none; }
+#camera-section { display:none; margin-bottom:20px; }
+#video { width:100%; border-radius:10px; max-height:300px; object-fit:cover; background:#000; display:block; }
+.camera-btns { display:flex; gap:10px; margin-top:10px; }
+#preview-section { display:none; }
+.preview-top { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+@media(max-width:520px){ .preview-top { grid-template-columns:1fr; } }
+.img-card { background:#fff; border:1px solid #dceee3; border-radius:10px; overflow:hidden; }
+.img-card img { width:100%; height:220px; object-fit:cover; display:block; }
+.img-label { font-size:12px; color:#6b8f71; padding:8px 12px; font-weight:500; }
+.action-card { background:#fff; border:1px solid #dceee3; border-radius:10px; padding:20px; display:flex; flex-direction:column; gap:10px; }
+.action-card p { font-size:13px; color:#6b8f71; line-height:1.5; }
+#result-section { display:none; margin-top:8px; }
+.result-main { background:#fff; border:1px solid #dceee3; border-radius:10px; padding:20px 22px; margin-bottom:12px; }
+.result-label { font-size:11px; font-weight:600; color:#6b8f71; letter-spacing:0.8px; text-transform:uppercase; margin-bottom:4px; }
+.result-name { font-size:26px; font-weight:700; margin-bottom:2px; }
+.result-name.healthy { color:#2d6a4f; }
+.result-name.disease { color:#c1440e; }
+.conf-text { font-size:13px; color:#6b8f71; margin-bottom:14px; }
+.bar-track { height:8px; background:#eef2ee; border-radius:4px; overflow:hidden; margin-bottom:18px; }
+.bar-fill { height:100%; border-radius:4px; background:#52b788; transition:width 0.8s ease; }
+.bar-fill.disease { background:#e07040; }
+.all-preds-label { font-size:12px; color:#6b8f71; font-weight:500; margin-bottom:8px; }
+.preds-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+@media(max-width:420px){ .preds-grid { grid-template-columns:repeat(2,1fr); } }
+.pred-item { background:#f5f7f5; border:1px solid #e0eae0; border-radius:8px; padding:10px 12px; }
+.pred-item.top { border-color:#52b788; background:#f0faf4; }
+.pred-item.top.disease-top { border-color:#e07040; background:#fff5f0; }
+.pred-item-name { font-size:11px; color:#4a7c59; font-weight:500; margin-bottom:3px; }
+.pred-item-pct { font-size:15px; font-weight:700; color:#1a2e1a; }
+.treatment-card { background:#fff; border:1px solid #dceee3; border-radius:10px; padding:20px 22px; }
+.treatment-card h3 { font-size:14px; font-weight:600; color:#1b4332; margin-bottom:10px; }
+.treatment-summary { font-size:14px; color:#333; line-height:1.6; margin-bottom:12px; }
+.med-label { font-size:11px; font-weight:600; color:#1b4332; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px; }
+.medicine-tag { display:inline-block; background:#e8f5e9; color:#1b4332; border:1px solid #b7d9c5; border-radius:6px; padding:5px 12px; font-size:13px; font-weight:500; margin:3px 3px 3px 0; }
+.steps { list-style:none; margin-top:12px; }
+.steps li { font-size:13px; color:#444; padding:6px 0 6px 18px; position:relative; line-height:1.5; border-bottom:1px solid #f0f0f0; }
+.steps li:last-child { border-bottom:none; }
+.steps li::before { content:"›"; position:absolute; left:0; color:#2d6a4f; font-weight:700; }
+.section-title { font-size:15px; font-weight:600; color:#1a2e1a; margin:36px 0 14px; }
+.chips-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
+.chip { background:#fff; border:1px solid #dceee3; border-radius:10px; padding:14px 16px; }
+.chip-name { font-size:14px; font-weight:600; color:#1a2e1a; margin-bottom:3px; }
+.chip-desc { font-size:12px; color:#6b8f71; line-height:1.4; }
+canvas#canvas { display:none; }
+.spinner { display:none; width:16px; height:16px; border:2px solid rgba(255,255,255,0.4); border-top-color:#fff; border-radius:50%; animation:spin 0.6s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.not-paddy-card { background:#fff8f0; border:1.5px solid #f4a261; border-radius:10px; padding:22px 24px; margin-bottom:12px; }
+.not-paddy-card .icon { font-size:32px; margin-bottom:10px; }
+.not-paddy-card h3 { font-size:17px; font-weight:700; color:#b94b00; margin-bottom:6px; }
+.not-paddy-card p { font-size:13px; color:#7a4010; line-height:1.6; margin-bottom:8px; }
+.not-paddy-card .top-guess { font-size:12px; color:#a0522d; background:#fde8d0; border-radius:6px; padding:6px 12px; display:inline-block; margin-top:4px; }
+</style>
+</head>
+<body>
+<canvas id="canvas" width="224" height="224"></canvas>
+<div class="topbar">
+  <h1>🌾 Paddy Disease Detector</h1>
+  <span>e-Yantra Innovation Challenge 2025–26</span>
+</div>
+<div id="status-bar">
+  <div class="dot" id="status-dot"></div>
+  <span id="status-text">Loading AI model...</span>
+</div>
+<div class="main">
+  <div id="upload-section">
+    <div class="upload-box" id="upload-zone">
+      <div class="icon">📷</div>
+      <h2>Upload a paddy leaf photo</h2>
+      <p>The AI will detect the disease and show the correct medicine to use</p>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="document.getElementById('file-input').click()">Choose Image</button>
+        <button class="btn-primary" style="background:#fff;color:#2d6a4f;border:1.5px solid #2d6a4f;" onclick="document.getElementById('camera-input').click()">Use Camera</button>
+        <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none">
+      </div>
+    </div>
+    <input type="file" id="file-input" accept="image/*">
+  </div>
+
+  <div id="preview-section">
+    <div class="preview-top">
+      <div class="img-card">
+        <img id="preview-img" src="" alt="Leaf photo">
+        <div class="img-label">Uploaded image</div>
+      </div>
+      <div class="action-card">
+        <p>Image loaded. Click Analyze to run the AI and get disease diagnosis with medicine recommendations from your proposal.</p>
+        <button class="btn-primary" id="btn-analyze">
+          <span id="analyze-text">Analyze</span>
+          <div class="spinner" id="spinner"></div>
+        </button>
+        <button class="btn-secondary" id="btn-reset">Try another image</button>
+      </div>
+    </div>
+    <div id="result-section" style="display:none"></div>
+  </div>
+  <div class="section-title">Detectable diseases</div>
+  <div class="chips-grid">
+    <div class="chip"><div class="chip-name">✅ Good Plant</div><div class="chip-desc">Healthy paddy — no treatment needed</div></div>
+    <div class="chip"><div class="chip-name">🟡 Tungro</div><div class="chip-desc">Viral disease spread by leafhoppers, causes yellowing</div></div>
+    <div class="chip"><div class="chip-name">🔴 Hispa</div><div class="chip-desc">Insect pest, white parallel streaks on leaves</div></div>
+    <div class="chip"><div class="chip-name">🟤 Dead Heart</div><div class="chip-desc">Yellow stem borer kills the central tiller shoot</div></div>
+    <div class="chip"><div class="chip-name">🟠 Brown Spot</div><div class="chip-desc">Fungal spots / sheath blight</div></div>
+    <div class="chip"><div class="chip-name">⚫ Blast</div><div class="chip-desc">Leaf blast — serious fungal disease</div></div>
+  </div>
+</div>
+<script>
+const MODEL_URL='https://cdn.jsdelivr.net/gh/sattue/paddy-disease-model@main/model.json';
+const CLASSES=['Good Plant','Tungro','Hispa','Dead Heart','Brown Spot','Blast'];
+const TREATMENTS={
+  'Good Plant':{summary:'Your paddy plant is healthy! No medicine needed.',medicines:[],steps:['Maintain 5–10 cm standing water level','Apply balanced NPK fertilizer as per schedule','Monitor regularly for early disease signs','Ensure good spacing between plants']},
+  'Tungro':{summary:'Tungro virus is spread by green leafhoppers. Control the insect vector urgently to stop spread.',medicines:['Profenofos 40% + Cypermethrin 4% EC','Chlorpyriphos 50% + Cypermethrin 4%'],steps:['Spray Profenofos 40% + Cypermethrin 4% EC on affected plants','Alternative: Chlorpyriphos 50% + Cypermethrin 4% foliar spray','Remove and destroy all infected plants immediately','Avoid planting near already-infected fields','Use resistant varieties like IR36 or TN1 next season']},
+  'Hispa':{summary:'Rice Hispa is an insect pest that scrapes the leaf surface. Treat with stem borer insecticides.',medicines:['Profenofos 40% + Cypermethrin 4% EC','Chlorpyriphos 50% + Cypermethrin 4%'],steps:['Spray Profenofos 40% + Cypermethrin 4% EC on leaves','Alternative: Chlorpyriphos 50% + Cypermethrin 4% foliar spray','Manually clip and destroy infested leaf tips','Use light traps at night to catch adult insects','Avoid excess nitrogen fertilizer']},
+  'Dead Heart':{summary:'Dead Heart is caused by Yellow Stem Borer attacking young tillers and killing the central shoot.',medicines:['Profenofos 40% + Cypermethrin 4% EC','Chlorpyriphos 50% + Cypermethrin 4%'],steps:['Spray Profenofos 40% + Cypermethrin 4% EC — primary medicine','Alternative: Chlorpyriphos 50% + Cypermethrin 4% — soil or foliar application','Remove and destroy egg masses visible on leaves','Set up light traps to reduce adult moth population','Clear all stubble and debris from field after harvest']},
+  'Brown Spot':{summary:'Brown Spot / Sheath Blight is a fungal disease. Apply fungicide spray immediately.',medicines:['Propiconazole 25% SC','Hexaconazole 5% EC','Carbendazim 50% WP'],steps:['Spray Propiconazole 25% SC at 1 mL per litre of water','Alternative: Hexaconazole 5% EC foliar spray','Also effective: Carbendazim 50% WP for blight control','Treat seeds with fungicide before sowing next season','Maintain proper drainage to reduce field humidity','Repeat spray every 10–14 days if infection is severe']},
+  'Blast':{summary:'Leaf Blast is a serious fungal disease. Your proposal has specific medicines — use them immediately.',medicines:['Copper Sulphate + Streptomycin Sulphate + Tetracycline Hydrochloride','Tricyclazole 75% WP — 180 gm per acre'],steps:['Mix Copper Sulphate + Streptomycin Sulphate + Tetracycline HCl and spray on affected areas','Apply Tricyclazole 75% WP at 180 gm per acre','First spray at tillering stage, second at panicle initiation','Avoid excess nitrogen fertilizer — worsens blast severely','Drain the field during foggy or highly humid weather','Use blast-resistant varieties like IR64 or Swarna next season']}
+};
+let model=null,currentImage=null;
+const statusDot=document.getElementById('status-dot'),statusText=document.getElementById('status-text');
+async function loadModel(){
+  try{
+    model=await tf.loadLayersModel(MODEL_URL);
+    statusDot.className='dot ready';
+    statusText.textContent='Model ready — upload a paddy leaf image to detect disease';
+  }catch(e){
+    statusDot.className='dot error';
+    statusText.textContent='Failed to load model. Check internet and refresh.';
+    console.error(e);
+  }
+}
+loadModel();
+document.getElementById('file-input').addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+const zone=document.getElementById('upload-zone');
+zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('dragover');});
+zone.addEventListener('dragleave',()=>zone.classList.remove('dragover'));
+zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('dragover');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+function loadFile(file){
+  const r=new FileReader();
+  r.onload=e=>{
+    document.getElementById('preview-img').src=e.target.result;
+    currentImage=document.getElementById('preview-img');
+    show('preview-section');hide('upload-section');hide('camera-section');
+    document.getElementById('result-section').style.display='none';
+  };
+  r.readAsDataURL(file);
+}
+document.getElementById('camera-input').addEventListener('change',e=>{
+  if(e.target.files[0])loadFile(e.target.files[0]);
+});
+document.getElementById('btn-reset').addEventListener('click',()=>{
+  hide('preview-section');show('upload-section');
+  document.getElementById('result-section').style.display='none';
+  document.getElementById('file-input').value='';
+  document.getElementById('camera-input').value='';
+});
+document.getElementById('btn-analyze').addEventListener('click',async()=>{
+  if(!model){alert('Model still loading, please wait.');return;}
+  const btn=document.getElementById('btn-analyze');
+  btn.disabled=true;
+  document.getElementById('spinner').style.display='block';
+  document.getElementById('analyze-text').textContent='Analyzing...';
+  try{const preds=await predict(currentImage);showResults(preds);}
+  catch(e){alert('Error: '+e.message);console.error(e);}
+  finally{
+    btn.disabled=false;
+    document.getElementById('spinner').style.display='none';
+    document.getElementById('analyze-text').textContent='Analyze again';
+  }
+});
+async function predict(img){
+  return tf.tidy(()=>{
+    const canvas=document.getElementById('canvas');
+    canvas.getContext('2d').drawImage(img,0,0,224,224);
+    const tensor=tf.browser.fromPixels(canvas).toFloat().div(tf.scalar(127.5)).sub(tf.scalar(1.0)).expandDims(0);
+    return Array.from(model.predict(tensor).dataSync());
+  });
+}
+const CONFIDENCE_THRESHOLD = 0.65; // minimum confidence to trust the result
+
+function showResults(preds){
+  const maxIdx=preds.indexOf(Math.max(...preds));
+  const name=CLASSES[maxIdx];
+  const conf=preds[maxIdx];
+  const confPct=(conf*100).toFixed(1);
+
+  const resultSection=document.getElementById('result-section');
+
+  // --- LOW CONFIDENCE: image is probably not a paddy plant ---
+  if(conf < CONFIDENCE_THRESHOLD){
+    resultSection.innerHTML=`
+      <div class="not-paddy-card">
+        <div class="icon">⚠️</div>
+        <h3>Image not recognised as a paddy plant</h3>
+        <p>The AI could not confidently identify this as a paddy leaf. Please upload a clear, close-up photo of a rice plant leaf for accurate diagnosis.</p>
+        <p>Tips for a good photo:</p>
+        <ul class="steps" style="margin-top:0">
+          <li>Make sure the leaf fills most of the frame</li>
+          <li>Shoot in good natural light — avoid flash or shadows</li>
+          <li>Hold the camera steady and focus on the leaf surface</li>
+          <li>Avoid photographing soil, sky, or the whole plant from far away</li>
+        </ul>
+        <div class="top-guess">AI's best guess: ${name} (${confPct}% confidence — too low to trust)</div>
+      </div>`;
+    resultSection.style.display='block';
+    resultSection.scrollIntoView({behavior:'smooth',block:'start'});
+    return;
+  }
+
+  // --- HIGH CONFIDENCE: show normal result ---
+  const isHealthy=name==='Good Plant';
+  const t=TREATMENTS[name];
+  resultSection.innerHTML=`
+    <div class="result-main">
+      <div class="result-label">Detection result</div>
+      <div class="result-name ${isHealthy?'healthy':'disease'}" id="result-name">${name}</div>
+      <div class="conf-text" id="conf-text">Confidence: ${confPct}%</div>
+      <div class="bar-track"><div class="bar-fill${isHealthy?'':' disease'}" id="bar-fill" style="width:0%"></div></div>
+      <div class="all-preds-label">All class probabilities</div>
+      <div class="preds-grid" id="preds-grid"></div>
+    </div>
+    <div class="treatment-card">
+      <h3>💊 Recommended Medicine &amp; Treatment</h3>
+      <div class="treatment-summary" id="treatment-summary"></div>
+      <div id="medicine-tags"></div>
+      <ul class="steps" id="treatment-steps"></ul>
+    </div>`;
+
+  setTimeout(()=>{
+    const bar=document.getElementById('bar-fill');
+    if(bar) bar.style.width=confPct+'%';
+  },50);
+
+  const sorted=preds.map((p,i)=>({name:CLASSES[i],val:p})).sort((a,b)=>b.val-a.val);
+  const grid=document.getElementById('preds-grid');
+  sorted.forEach((p,i)=>{
+    const isTop=i===0,isDisease=p.name!=='Good Plant';
+    const d=document.createElement('div');
+    d.className='pred-item'+(isTop?(' top'+(isDisease?' disease-top':'')):'');
+    d.innerHTML='<div class="pred-item-name">'+p.name+'</div><div class="pred-item-pct">'+(p.val*100).toFixed(1)+'%</div>';
+    grid.appendChild(d);
+  });
+
+  document.getElementById('treatment-summary').textContent=t.summary;
+  const tagsDiv=document.getElementById('medicine-tags');
+  if(t.medicines.length>0){
+    const lbl=document.createElement('div');lbl.className='med-label';lbl.textContent='Medicines to use:';tagsDiv.appendChild(lbl);
+    t.medicines.forEach(m=>{const tag=document.createElement('span');tag.className='medicine-tag';tag.textContent=m;tagsDiv.appendChild(tag);});
+  }
+  const stepsList=document.getElementById('treatment-steps');
+  t.steps.forEach(s=>{const li=document.createElement('li');li.textContent=s;stepsList.appendChild(li);});
+
+  resultSection.style.display='block';
+  resultSection.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function show(id){document.getElementById(id).style.display='block';}
+function hide(id){document.getElementById(id).style.display='none';}
+</script>
+</body>
+</html>
